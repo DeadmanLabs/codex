@@ -51,7 +51,9 @@
     "use-interval": "1.4.0",
     "zod": "^3.24.3",
     "chokidar": "^3.5.3",
-    "ws": "^8.13.0"
+    "ws": "^8.13.0",
+    "mongodb": "^5.6.0",
+    "uuid": "^9.0.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.22.0",

@@ -11,6 +11,9 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import chokidar from "chokidar";
+import { MongoClient } from "mongodb";
+import { v4 as uuidv4 } from "uuid";
+import { OpenAI } from "openai";
 import { loadConfig } from "./utils/config";
 import { createInputItem } from "./utils/input-utils";
 import { AgentLoop } from "./utils/agent/agent-loop";
@@ -27,6 +30,25 @@ if (!apiKey) {
   // Load configuration
   let config = loadConfig(undefined, undefined, { cwd: process.cwd() });
   config = { apiKey, ...config };
+
+  // Initialize MongoDB client
+  const mongoUri = process.env.MONGODB_URI;
+  if (!mongoUri) {
+    console.error("Missing MongoDB URI (set MONGODB_URI)");
+    process.exit(1);
+  }
+  const mongoDbName = process.env.MONGODB_DB || "codex";
+  const mongoClient = new MongoClient(mongoUri);
+  await mongoClient.connect();
+  const db = mongoClient.db(mongoDbName);
+  const chatsCol = db.collection("chats");
+  const messagesCol = db.collection("messages");
+
+  // OpenAI client for title generation
+  const titleClient = new OpenAI({ apiKey });
+
+  // Track current chat session
+  let currentChatId: string | null = null;
 
   // History of items
   const items: Array<any> = [];
@@ -99,9 +121,36 @@ if (!apiKey) {
     instructions: config.instructions,
     approvalPolicy: "full-auto",
     additionalWritableRoots: [],
-    onItem: (item) => {
+    // Handle each new item: broadcast and persist in MongoDB
+    onItem: async (item) => {
       items.push(item);
       broadcast({ type: "item", item });
+      if (currentChatId) {
+        const ts = new Date();
+        const dir = process.cwd();
+        if (item.type === "function_call") {
+          // Record tool use without contents
+          await messagesCol.insertOne({
+            chatId: currentChatId,
+            role: "assistant",
+            type: "tool",
+            text: `Tool Use: ${item.name}`,
+            timestamp: ts,
+            directory: dir
+          });
+        } else if (item.type === "message") {
+          // Record chat messages
+          const text = (item.content || []).map((c: any) => c.text).join("");
+          await messagesCol.insertOne({
+            chatId: currentChatId,
+            role: item.role,
+            type: "message",
+            text,
+            timestamp: ts,
+            directory: dir
+          });
+        }
+      }
     },
     onLoading: (loading) => broadcast({ type: "loading", loading }),
     getCommandConfirmation: async (_cmd, patch) => ({ review: ReviewDecision.YES, applyPatch: patch }),
@@ -144,8 +193,41 @@ if (!apiKey) {
           if (typeof prompt !== "string" || prompt.trim() === "") {
             throw new Error("Invalid prompt");
           }
-          const inputItem = await createInputItem(prompt, []);
+          // On first prompt, create new chat session
+          if (!currentChatId) {
+            currentChatId = uuidv4();
+            // Generate chat title using OpenAI
+            const titleRes = await titleClient.chat.completions.create({
+              model: config.model,
+              messages: [
+                { role: "system", content: "Generate a concise, descriptive title for this chat session." },
+                { role: "user", content: prompt }
+              ]
+            });
+            const title = titleRes.choices?.[0]?.message?.content.trim() || "New Chat";
+            // Persist chat metadata
+            await chatsCol.insertOne({
+              chatId: currentChatId,
+              title,
+              initialPrompt: prompt,
+              createdAt: new Date(),
+              directory: process.cwd(),
+              tokenUsage: { input: 0, output: 0, cached: 0 }
+            });
+          }
+          // Record user prompt message
+          if (currentChatId) {
+            await messagesCol.insertOne({
+              chatId: currentChatId,
+              role: "user",
+              type: "message",
+              text: prompt,
+              timestamp: new Date(),
+              directory: process.cwd()
+            });
+          }
           // Run agent on new prompt
+          const inputItem = await createInputItem(prompt, []);
           agent.run([inputItem]);
           res.writeHead(200, { "Content-Type": "application/json" });
           res.end(JSON.stringify({ success: true }));
@@ -190,6 +272,46 @@ if (!apiKey) {
         }),
       );
       return;
+    }
+    // Query all chats
+    if (method === "GET" && reqUrl.pathname === "/chats") {
+      const chats = await chatsCol
+        .find({})
+        .project({ _id: 0, chatId: 1, title: 1, createdAt: 1, directory: 1 })
+        .toArray();
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ chats }));
+      return;
+    }
+    // Query chat metadata by chatId
+    {
+      const m = reqUrl.pathname.match(/^\/chats\/([^\/]+)$/);
+      if (method === "GET" && m) {
+        const chatId = m[1];
+        const chat = await chatsCol.findOne({ chatId });
+        if (!chat) {
+          res.writeHead(404, { "Content-Type": "text/plain" });
+          res.end("Chat not found");
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(chat));
+        return;
+      }
+    }
+    // Query messages for a chat
+    {
+      const m2 = reqUrl.pathname.match(/^\/chats\/([^\/]+)\/messages$/);
+      if (method === "GET" && m2) {
+        const chatId = m2[1];
+        const messages = await messagesCol
+          .find({ chatId })
+          .sort({ timestamp: 1 })
+          .toArray();
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ messages }));
+        return;
+      }
     }
     // Fallback
     res.writeHead(404, { "Content-Type": "text/plain" });

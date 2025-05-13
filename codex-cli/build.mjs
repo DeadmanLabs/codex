@@ -74,6 +74,7 @@ esbuild
     sourcemap: isDevBuild ? "inline" : true,
     plugins,
     inject: ["./require-shim.js"],
+    external: ["mongodb", "uuid"],
   })
   .catch(() => process.exit(1));
 
@@ -90,5 +91,6 @@ esbuild
     sourcemap: isDevBuild ? "inline" : true,
     plugins,
     inject: ["./require-shim.js"],
+    external: ["mongodb", "uuid"],
   })
   .catch(() => process.exit(1));
