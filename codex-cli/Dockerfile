@@ -1,56 +1,45 @@
-FROM node:20-slim
+###
+# Build stage: installs dependencies and compiles source
+###
+FROM node:20-slim AS builder
+WORKDIR /usr/src/app
 
-ARG TZ
-ENV TZ="$TZ"
+# Copy package files and install all dependencies
+COPY package*.json ./
+RUN npm ci
 
-# Install basic development tools, ca-certificates, and iptables/ipset, then clean up apt cache to reduce image size
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  aggregate \
-  ca-certificates \
-  curl \
-  dnsutils \
-  fzf \
-  gh \
-  git \
-  gnupg2 \
-  iproute2 \
-  ipset \
-  iptables \
-  jq \
-  less \
-  man-db \
-  procps \
-  sudo \
-  unzip \
-  ripgrep \
-  zsh \
-  && rm -rf /var/lib/apt/lists/*
+# Copy source and build the project
+COPY . .
+RUN npm run build
 
-# Ensure default node user has access to /usr/local/share
-RUN mkdir -p /usr/local/share/npm-global && \
-  chown -R node:node /usr/local/share
+###
+# Production stage: only runtime dependencies and built assets
+###
+# Use the official MongoDB image as base so mongod is bundled
+FROM mongo:6.0 AS runner
+WORKDIR /usr/src/app
+# Install Node.js runtime
+RUN apt-get update \
+    && apt-get install -y curl gnupg ca-certificates \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && rm -rf /var/lib/apt/lists/*
 
-ARG USERNAME=node
+# Copy only package files and install production dependencies
+COPY package*.json ./
+RUN npm ci --omit=dev
 
-# Set up non-root user
-USER node
+# Copy built code from builder
+COPY --from=builder /usr/src/app/dist ./dist
 
-# Install global packages
-ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
-ENV PATH=$PATH:/usr/local/share/npm-global/bin
+# Expose server and MongoDB ports
+EXPOSE 3000
+EXPOSE 27017
+ENV PORT=3000
 
-# Install codex
-COPY dist/codex.tgz codex.tgz
-RUN npm install -g codex.tgz \
-  && npm cache clean --force \
-  && rm -rf /usr/local/share/npm-global/lib/node_modules/codex-cli/node_modules/.cache \
-  && rm -rf /usr/local/share/npm-global/lib/node_modules/codex-cli/tests \
-  && rm -rf /usr/local/share/npm-global/lib/node_modules/codex-cli/docs
+# Copy startup script and make executable
+COPY entrypoint.sh /usr/src/app/entrypoint.sh
+RUN chmod +x /usr/src/app/entrypoint.sh
 
-# Copy and set up firewall script
-COPY scripts/init_firewall.sh /usr/local/bin/
-USER root
-RUN chmod +x /usr/local/bin/init_firewall.sh && \
-  echo "node ALL=(root) NOPASSWD: /usr/local/bin/init_firewall.sh" > /etc/sudoers.d/node-firewall && \
-  chmod 0440 /etc/sudoers.d/node-firewall
-USER node
+# Launch MongoDB and Codex server
+ENTRYPOINT ["/usr/src/app/entrypoint.sh"]

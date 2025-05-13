@@ -93,8 +93,16 @@ export function exec(
   // long‑running child processes. We default to SIGTERM to give the process a
   // chance to clean up, falling back to SIGKILL if it does not exit in a
   // timely fashion.
+  // If an AbortSignal is provided, ensure the spawned process is terminated
+  // when the signal is triggered, and clean up the listener after exit.
+  let _abortHandler: (() => void) | undefined;
   if (abortSignal) {
-    const abortHandler = () => {
+    // Increase max listeners to avoid warnings when reused.
+    try {
+      // @ts-ignore: AbortSignal is EventTarget, setMaxListeners may apply
+      require('events').setMaxListeners(abortSignal, 0);
+    } catch {}
+    _abortHandler = () => {
       if (isLoggingEnabled()) {
         log(`raw-exec: abort signal received – killing child ${child.pid}`);
       }
@@ -103,27 +111,19 @@ export function exec(
           return;
         }
         try {
-          try {
-            // Send to the *process group* so grandchildren are included.
-            process.kill(-child.pid, signal);
-          } catch {
-            // Fallback: kill only the immediate child (may leave orphans on
-            // exotic kernels that lack process‑group semantics, but better
-            // than nothing).
-            try {
-              child.kill(signal);
-            } catch {
-              /* ignore */
-            }
-          }
+          // Send to the *process group* so grandchildren are included.
+          process.kill(-child.pid, signal);
         } catch {
-          /* already gone */
+          // Fallback: kill only the immediate child.
+          try {
+            child.kill(signal);
+          } catch {
+            /* ignore */
+          }
         }
       };
-
       // First try graceful termination.
       killTarget("SIGTERM");
-
       // Escalate to SIGKILL if the group refuses to die.
       setTimeout(() => {
         if (!child.killed) {
@@ -132,9 +132,9 @@ export function exec(
       }, 2000).unref();
     };
     if (abortSignal.aborted) {
-      abortHandler();
-    } else {
-      abortSignal.addEventListener("abort", abortHandler, { once: true });
+      _abortHandler();
+    } else if (_abortHandler) {
+      abortSignal.addEventListener("abort", _abortHandler, { once: true });
     }
   }
   // If spawning the child failed (e.g. the executable could not be found)
@@ -199,6 +199,10 @@ export function exec(
           `raw-exec: child ${child.pid} exited code=${exitCode} signal=${signal}`,
         );
       }
+      // Clean up abort listener to prevent memory leak
+      if (abortSignal && _abortHandler) {
+        abortSignal.removeEventListener("abort", _abortHandler);
+      }
       resolve({
         stdout,
         stderr,
@@ -207,6 +211,10 @@ export function exec(
     });
 
     child.on("error", (err) => {
+      // Clean up abort listener on error
+      if (abortSignal && _abortHandler) {
+        abortSignal.removeEventListener("abort", _abortHandler);
+      }
       resolve({
         stdout: "",
         stderr: String(err),

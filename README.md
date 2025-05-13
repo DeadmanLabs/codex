@@ -151,6 +151,32 @@ The hardening mechanism Codex uses depends on your OS:
   custom `iptables`/`ipset` firewall script denies all egress except the
   OpenAI API. This gives you deterministic, reproducible runs without needing
   root on the host. You can use the [`run_in_container.sh`](./codex-cli/scripts/run_in_container.sh) script to set up the sandbox.
+  
+  #### Docker Development Environment
+
+  To build and start the Codex development environment in Docker, use the provided scripts:
+
+  - Linux/macOS:
+    ```bash
+    ./docker-build.sh
+    ./docker-start.sh
+    ```
+  - Windows (PowerShell):
+    ```powershell
+    .\\docker-build.bat
+    .\\docker-start.bat
+    ```
+
+  These scripts build and run two containers:
+
+  - `codex-main`: runs the Codex server and frontend.
+  - `codex-cli`: provides a sandboxed CLI environment.
+
+  The following ports are exposed:
+  - `3000` for the Codex server.
+  - `5173` for the React interface.
+
+  If you encounter proxy-related errors when fetching base images (e.g., lookup `http.docker.internal`), see [Troubleshooting Proxy Issues](#troubleshooting-proxy-issues) below.
 
 ---
 
@@ -163,7 +189,18 @@ The hardening mechanism Codex uses depends on your OS:
 | Git (optional, recommended) | 2.23+ for built‑in PR helpers                                   |
 | RAM                         | 4‑GB minimum (8‑GB recommended)                                 |
 
-> Never run `sudo npm install -g`; fix npm permissions instead.
+
+### Troubleshooting Proxy Issues
+
+If you encounter proxy-related errors when building or fetching Docker base images (e.g., DNS lookup failures for `http.docker.internal`), follow these steps:
+
+- In Docker Desktop, disable or correctly configure HTTP/HTTPS proxies under **Settings > Resources > Proxies**.
+- Unset proxy environment variables before building:
+  - Bash: `unset HTTP_PROXY HTTPS_PROXY http_proxy https_proxy`
+  - PowerShell: `Remove-Item Env:HTTP_PROXY, Env:HTTPS_PROXY, Env:http_proxy, Env:https_proxy`
+- Pre-pull the required base images (e.g., `docker pull node:20-slim`) to avoid network issues.
+- Ensure your DNS resolver can resolve `http.docker.internal` if you rely on Docker Desktop's internal proxy.
+- For more details, see Docker's official documentation on [Network proxy](https://docs.docker.com/network/proxy/).
 
 ---
 
