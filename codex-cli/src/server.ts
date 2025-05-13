@@ -2,9 +2,14 @@
 import "dotenv/config";
 import http from "node:http";
 import { WebSocketServer } from "ws";
-import { promises as fsp } from "fs";
-import fs from "fs";
+// Use fs/promises for async methods and fs for sync methods
+import * as fsp from "fs/promises";
+import * as fsSync from "fs";
 import path from "path";
+// __dirname replacement for ES modules
+import { fileURLToPath } from "url";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 import chokidar from "chokidar";
 import { loadConfig } from "./utils/config";
 import { createInputItem } from "./utils/input-utils";

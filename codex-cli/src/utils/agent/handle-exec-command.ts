@@ -5,7 +5,7 @@ import type { ApplyPatchCommand, ApprovalPolicy } from "../../approvals.js";
 import type { ResponseInputItem } from "openai/resources/responses/responses.mjs";
 
 import { exec, execApplyPatch } from "./exec.js";
-import { isLoggingEnabled, log } from "./log.js";
+import { isLoggingEnabled, log } from "../logger/log";
 import { ReviewDecision } from "./review.js";
 import { FullAutoErrorMode } from "../auto-approval-mode.js";
 import { SandboxType } from "./sandbox/interface.js";

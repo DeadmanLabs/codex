@@ -8,7 +8,7 @@
 
 import type { FullAutoErrorMode } from "./auto-approval-mode.js";
 
-import { log, isLoggingEnabled } from "./agent/log.js";
+import { log, isLoggingEnabled } from "./logger/log";
 import { AutoApprovalMode } from "./auto-approval-mode.js";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { load as loadYaml, dump as dumpYaml } from "js-yaml";

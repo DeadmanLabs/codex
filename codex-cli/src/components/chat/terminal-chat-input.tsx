@@ -6,7 +6,7 @@ import type {
 } from "openai/resources/responses/responses.mjs";
 
 import { TerminalChatCommandReview } from "./terminal-chat-command-review.js";
-import { log, isLoggingEnabled } from "../../utils/agent/log.js";
+import { log, isLoggingEnabled } from "../../utils/logger/log.js";
 import { loadConfig } from "../../utils/config.js";
 import { createInputItem } from "../../utils/input-utils.js";
 import { setSessionId } from "../../utils/session.js";

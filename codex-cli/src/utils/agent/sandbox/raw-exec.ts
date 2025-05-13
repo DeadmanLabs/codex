@@ -7,7 +7,7 @@ import type {
   StdioPipe,
 } from "child_process";
 
-import { log, isLoggingEnabled } from "../log.js";
+import { log, isLoggingEnabled } from "../../logger/log";
 import { adaptCommandForPlatform } from "../platform-commands.js";
 import { spawn } from "child_process";
 import * as os from "os";

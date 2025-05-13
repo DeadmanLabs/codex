@@ -5,7 +5,7 @@ import type { ColorName } from "chalk";
 import type { ResponseItem } from "openai/resources/responses/responses.mjs";
 
 import TerminalChatInput from "./terminal-chat-input.js";
-import { TerminalChatToolCallCommand } from "./terminal-chat-tool-call-item.js";
+import { TerminalChatToolCallCommand } from "./terminal-chat-tool-call-command.js";
 import {
   calculateContextPercentRemaining,
   uniqueById,
@@ -15,7 +15,7 @@ import { formatCommandForDisplay } from "../../format-command.js";
 import { useConfirmation } from "../../hooks/use-confirmation.js";
 import { useTerminalSize } from "../../hooks/use-terminal-size.js";
 import { AgentLoop } from "../../utils/agent/agent-loop.js";
-import { isLoggingEnabled, log } from "../../utils/agent/log.js";
+import { isLoggingEnabled, log } from "../../utils/logger/log.js";
 import { ReviewDecision } from "../../utils/agent/review.js";
 import { OPENAI_BASE_URL } from "../../utils/config.js";
 import { createInputItem } from "../../utils/input-utils.js";
