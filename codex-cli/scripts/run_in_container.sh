@@ -41,9 +41,15 @@ docker rm -f codex 2>/dev/null || true
 # Run the container with the specified directory mounted at the same path inside the container.
 docker run --name codex -d \
   -e OPENAI_API_KEY \
+  -e MONGODB_URI \
+  -e MONGODB_HOST \
+  -e MONGODB_PORT \
   --cap-add=NET_ADMIN \
   --cap-add=NET_RAW \
+  # Mount project and logs directory for host access
+  # Mount project and logs directory for host access
   -v "$WORK_DIR:/app$WORK_DIR" \
+  -v "$WORK_DIR/codex-cli/logs:/usr/src/app/logs" \
   codex \
   sleep infinity
 

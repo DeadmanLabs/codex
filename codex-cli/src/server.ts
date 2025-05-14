@@ -31,13 +31,13 @@ if (!apiKey) {
   let config = loadConfig(undefined, undefined, { cwd: process.cwd() });
   config = { apiKey, ...config };
 
-  // Initialize MongoDB client
-  const mongoUri = process.env.MONGODB_URI;
-  if (!mongoUri) {
-    console.error("Missing MongoDB URI (set MONGODB_URI)");
-    process.exit(1);
-  }
+  // Initialize MongoDB client (with Docker-friendly defaults)
+  // Prefer full URI; otherwise default to local MongoDB instance on localhost:27017
+  const mongoHost = process.env.MONGODB_HOST || "127.0.0.1";
+  const mongoPort = process.env.MONGODB_PORT || "27017";
+  const mongoUri = process.env.MONGODB_URI || `mongodb://${mongoHost}:${mongoPort}`;
   const mongoDbName = process.env.MONGODB_DB || "codex";
+  console.log(`Connecting to MongoDB at ${mongoUri}, database '${mongoDbName}'`);
   const mongoClient = new MongoClient(mongoUri);
   await mongoClient.connect();
   const db = mongoClient.db(mongoDbName);

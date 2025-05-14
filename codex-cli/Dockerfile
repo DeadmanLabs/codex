@@ -32,14 +32,17 @@ RUN npm ci --omit=dev
 # Copy built code from builder
 COPY --from=builder /usr/src/app/dist ./dist
 
-# Expose server and MongoDB ports
+## Expose server and MongoDB ports
 EXPOSE 3000
-EXPOSE 27017
+EXPOSE 27018
 ENV PORT=3000
+ENV MONGODB_PORT=27018
 
 # Copy startup script and make executable
 COPY entrypoint.sh /usr/src/app/entrypoint.sh
-RUN chmod +x /usr/src/app/entrypoint.sh
+# Normalize line endings (remove CR) and make entrypoint executable
+RUN sed -i 's/\r$//' /usr/src/app/entrypoint.sh \
+ && chmod +x /usr/src/app/entrypoint.sh
 
 # Launch MongoDB and Codex server
 ENTRYPOINT ["/usr/src/app/entrypoint.sh"]
