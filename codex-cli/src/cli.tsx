@@ -37,6 +37,8 @@ import meow from "meow";
 import path from "path";
 import React from "react";
 
+import { ALL_TOOLS } from "./tools";
+
 // Call this early so `tail -F "$TMPDIR/oai-codex/codex-cli-latest.log"` works
 // immediately. This must be run with DEBUG=1 for logging to work.
 initLogger();
@@ -69,6 +71,7 @@ const cli = meow(
     --project-doc <file>       Include an additional markdown file at <file> as context
     --full-stdout              Do not truncate stdout/stderr from command outputs
     --notify                   Enable desktop notifications for responses
+    --tools <list>             Comma-separated list of tools to enable (e.g. shell,datetime)
 
   Dangerous options
     --dangerously-auto-approve-everything
@@ -149,6 +152,10 @@ const cli = meow(
       notify: {
         type: "boolean",
         description: "Enable desktop notifications for responses",
+      },
+      tools: {
+        type: "string",
+        description: "Comma-separated list of tools to enable (e.g. shell,datetime)",
       },
 
       // Experimental mode where whole directory is loaded in context and model is requested
@@ -303,6 +310,15 @@ const autoApproveEverything = Boolean(
 );
 const fullStdout = Boolean(cli.flags.fullStdout);
 
+// Determine which tools are enabled (by default: all)
+const toolsFlag = cli.flags.tools as string | undefined;
+const selectedToolNames = toolsFlag
+  ? toolsFlag.split(',').map((s) => s.trim()).filter((s) => s)
+  : undefined;
+const selectedTools = selectedToolNames
+  ? ALL_TOOLS.filter((t) => selectedToolNames.includes((t as any).name))
+  : ALL_TOOLS;
+
 if (quietMode) {
   process.env["CODEX_QUIET_MODE"] = "1";
   if (!prompt || prompt.trim() === "") {
@@ -320,6 +336,7 @@ if (quietMode) {
       : AutoApprovalMode.SUGGEST,
     additionalWritableRoots,
     config,
+    tools: selectedTools,
   });
   onExit();
   process.exit(0);
@@ -355,6 +372,7 @@ const instance = render(
     approvalPolicy={approvalPolicy}
     additionalWritableRoots={additionalWritableRoots}
     fullStdout={fullStdout}
+    tools={selectedTools}
   />,
   {
     patchConsole: process.env["DEBUG"] ? false : true,
@@ -417,12 +435,14 @@ async function runQuietMode({
   approvalPolicy,
   additionalWritableRoots,
   config,
+  tools,
 }: {
   prompt: string;
   imagePaths: Array<string>;
   approvalPolicy: ApprovalPolicy;
   additionalWritableRoots: ReadonlyArray<string>;
   config: AppConfig;
+  tools?: Array<any>;
 }): Promise<void> {
   const agent = new AgentLoop({
     model: config.model,
@@ -430,6 +450,7 @@ async function runQuietMode({
     instructions: config.instructions,
     approvalPolicy,
     additionalWritableRoots,
+    tools: tools,
     onItem: (item: ResponseItem) => {
       // eslint-disable-next-line no-console
       console.log(formatResponseItemForQuietMode(item));

@@ -16,7 +16,7 @@ export type AppRollout = {
   items: Array<ResponseItem>;
 };
 
-type Props = {
+ type Props = {
   prompt?: string;
   config: AppConfig;
   imagePaths?: Array<string>;
@@ -24,6 +24,8 @@ type Props = {
   approvalPolicy: ApprovalPolicy;
   additionalWritableRoots: ReadonlyArray<string>;
   fullStdout: boolean;
+  /** List of enabled tools (function definitions) to use */
+  tools?: Array<any>;
 };
 
 export default function App({
@@ -34,6 +36,7 @@ export default function App({
   approvalPolicy,
   additionalWritableRoots,
   fullStdout,
+  tools,
 }: Props): JSX.Element {
   const app = useApp();
   const [accepted, setAccepted] = useState(() => false);
@@ -101,6 +104,7 @@ export default function App({
       approvalPolicy={approvalPolicy}
       additionalWritableRoots={additionalWritableRoots}
       fullStdout={fullStdout}
+      tools={tools}
     />
   );
 }

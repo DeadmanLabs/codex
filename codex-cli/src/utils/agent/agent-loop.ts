@@ -19,6 +19,7 @@ import {
   setSessionId,
 } from "../session.js";
 import { handleExecCommand } from "./handle-exec-command.js";
+import { ALL_TOOLS } from "../../tools/index.js";
 import { randomUUID } from "node:crypto";
 import OpenAI, { APIConnectionTimeoutError } from "openai";
 
@@ -47,6 +48,8 @@ type AgentLoopParams = {
 
   /** Extra writable roots to use with sandbox execution. */
   additionalWritableRoots: ReadonlyArray<string>;
+  /** Optional list of function tools to expose to the LLM */
+  tools?: Array<any>;
 
   /** Called when the command is not auto-approved to request explicit user review. */
   getCommandConfirmation: (
@@ -62,6 +65,8 @@ export class AgentLoop {
   private approvalPolicy: ApprovalPolicy;
   private config: AppConfig;
   private additionalWritableRoots: ReadonlyArray<string>;
+  /** List of function tools exposed in API calls */
+  private tools: Array<any>;
 
   // Using `InstanceType<typeof OpenAI>` sidesteps typing issues with the OpenAI package under
   // the TS 5+ `moduleResolution=bundler` setup. OpenAI client instance. We keep the concrete
@@ -206,10 +211,10 @@ export class AgentLoop {
     model,
     instructions,
     approvalPolicy,
-    // `config` used to be required.  Some unit‑tests (and potentially other
+    // `config` used to be required.  Some unit-tests (and potentially other
     // callers) instantiate `AgentLoop` without passing it, so we make it
     // optional and fall back to sensible defaults.  This keeps the public
-    // surface backwards‑compatible and prevents runtime errors like
+    // surface backwards-compatible and prevents runtime errors like
     // "Cannot read properties of undefined (reading 'apiKey')" when accessing
     // `config.apiKey` below.
     config,
@@ -218,6 +223,7 @@ export class AgentLoop {
     getCommandConfirmation,
     onLastResponseId,
     additionalWritableRoots,
+    tools,
   }: AgentLoopParams & { config?: AppConfig }) {
     this.model = model;
     this.instructions = instructions;
@@ -235,6 +241,8 @@ export class AgentLoop {
         instructions: instructions ?? "",
       } as AppConfig);
     this.additionalWritableRoots = additionalWritableRoots;
+    // Initialize tools registry for this session
+    this.tools = tools ?? ALL_TOOLS;
     this.onItem = onItem;
     this.onLoading = onLoading;
     this.getCommandConfirmation = getCommandConfirmation;
@@ -314,6 +322,23 @@ export class AgentLoop {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const callId: string = (item as any).call_id ?? (item as any).id;
 
+    // Quick path for the datetime tool before parsing exec arguments
+    if (name === "datetime") {
+      const dtCallId: string = callId;
+      let nowStr: string;
+      try {
+        nowStr = new Date().toISOString();
+      } catch {
+        nowStr = String(new Date());
+      }
+      const dtResult = { output: nowStr, metadata: { exit_code: 0, duration_seconds: 0 } };
+      const dtOutput: ResponseInputItem.FunctionCallOutput = {
+        type: "function_call_output",
+        call_id: dtCallId,
+        output: JSON.stringify(dtResult),
+      };
+      return [dtOutput];
+    }
     const args = parseToolCallArguments(rawArguments ?? "{}");
     if (isLoggingEnabled()) {
       log(
@@ -354,7 +379,7 @@ export class AgentLoop {
     // used to tell model to stop if needed
     const additionalItems: Array<ResponseInputItem> = [];
 
-    // TODO: allow arbitrary function calls (beyond shell/container.exec)
+    // Handle shell/container.exec calls
     if (name === "container.exec" || name === "shell") {
       const {
         outputText,
@@ -517,31 +542,7 @@ export class AgentLoop {
               stream: true,
               parallel_tool_calls: false,
               reasoning,
-              tools: [
-                {
-                  type: "function",
-                  name: "shell",
-                  description: "Runs a shell command, and returns its output.",
-                  strict: false,
-                  parameters: {
-                    type: "object",
-                    properties: {
-                      command: { type: "array", items: { type: "string" } },
-                      workdir: {
-                        type: "string",
-                        description: "The working directory for the command.",
-                      },
-                      timeout: {
-                        type: "number",
-                        description:
-                          "The maximum time to wait for the command to complete in milliseconds.",
-                      },
-                    },
-                    required: ["command"],
-                    additionalProperties: false,
-                  },
-                },
-              ],
+              tools: this.tools,
             });
             break;
           } catch (error) {

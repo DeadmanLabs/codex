@@ -40,6 +40,8 @@ type Props = {
   approvalPolicy: ApprovalPolicy;
   additionalWritableRoots: ReadonlyArray<string>;
   fullStdout: boolean;
+  /** Function-style tool definitions to expose */
+  tools?: Array<any>;
 };
 
 const colorsByPolicy: Record<ApprovalPolicy, ColorName | undefined> = {
@@ -126,6 +128,7 @@ export default function TerminalChat({
   approvalPolicy: initialApprovalPolicy,
   additionalWritableRoots,
   fullStdout,
+  tools,
 }: Props): React.ReactElement {
   // Desktop notification setting
   const notify = config.notify;
@@ -189,6 +192,7 @@ export default function TerminalChat({
       instructions: config.instructions,
       approvalPolicy,
       additionalWritableRoots,
+      tools: tools,
       onLastResponseId: setLastResponseId,
       onItem: (item) => {
         log(`onItem: ${JSON.stringify(item)}`);
